@@ -1,0 +1,7 @@
+name: "Queen's University Faculty of Law Teasers"
+type: module
+description: "Teaser functionality for the Queen's University Faculty of Law website."
+package: "Queen's University Faculty of Law"
+dependencies:
+  - drupal:pi_functions
+core: 8.x

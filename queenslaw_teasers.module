@@ -1,0 +1,171 @@
+<?php
+define('QUEENSLAW_TEASERS_VIEW_MODE', 'teaser');
+define('QUEENSLAW_TEASERS_ALTERNATE_VIEW_MODE', 'alternate_teaser');
+define('QUEENSLAW_TEASERS_EXCLUDE_FIELD', 'field_teaser_exclude');
+define('QUEENSLAW_TEASERS_IMAGE_FIELD', 'field_teaser_image');
+define('QUEENSLAW_TEASERS_ALTERNATE_IMAGE_STYLE', 'title');
+
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Link;
+use Drupal\Core\Url;
+use Drupal\image\Entity\ImageStyle;
+use Drupal\node\Entity\Node;
+
+/**
+ * Implements theme_preprocess_html().
+ *
+ * Add a body class if this page has an alternate teasers.
+ */
+function queenslaw_teasers_preprocess_html(&$variables) {
+  if (_queenslaw_teasers_match_alternate_teasers_path()) $variables['attributes']['class'][] = 'has-queenslaw-alternate-teasers';
+}
+
+/**
+ * Build the content of the teasers block.
+ */
+function _queenslaw_teasers_block_content($menus = []) {
+  $teasers = [];
+  $mlids = [];
+  $alternate = FALSE;
+  if (_queenslaw_teasers_match_alternate_teasers_path()) $alternate = TRUE;
+  // if this is the front page, show all top-level menu items
+  if (\Drupal::service('path.matcher')->isFrontPage()) {
+    if (!empty($menus)) {
+      // Currently sorting by menu alphabetically, which might need to be revised at some
+      // point; if so, it might be feasible to get the order from the site map module.
+      $query = \Drupal::database()->select('menu_tree', 'mt')
+        ->fields('mt', ['mlid', 'menu_name'])
+        ->condition('mt.route_name', 'entity.node.canonical')
+        ->condition('mt.depth', 1)
+        ->condition('mt.enabled', 1)
+        ->condition('mt.menu_name', $menus, 'IN')
+        ->orderBy('mt.menu_name', 'ASC')
+        ->execute();
+      $results = $query->fetchAllAssoc('mlid');
+      if (!empty($results)) {
+        foreach ($results as $mlid => $result) {
+          $menu_name = $result->menu_name;
+          if (!isset($mlids[$menu_name])) $mlids[$menu_name] = [];
+          $mlids[$menu_name][] = $result->mlid;
+        }
+      }
+    }
+  }
+  else ($mlids = [0 => pi_functions_node_menu_child_mlids()]);
+  if ($mlids) {
+    foreach ($mlids as $menu => $menu_items) {
+      if ($menu_items) {
+        if ($nids = pi_functions_nids_from_mlids($menu_items)) {
+          $view_mode = QUEENSLAW_TEASERS_VIEW_MODE;
+          $container_attributes = [
+            'class' => ['queenslaw-teasers'],
+          ];
+          if ($alternate) {
+            $view_mode = QUEENSLAW_TEASERS_ALTERNATE_VIEW_MODE;
+            $container_attributes['class'][] = 'queenslaw-alternate-teasers';
+          }
+          foreach ($nids as $mlid => $nid) {
+            $view_builder = \Drupal::entityTypeManager()->getViewBuilder('node');
+            if (($node = Node::load($nid)) && ($node->isPublished())) {
+              $include = TRUE;
+              if ($node->hasField(QUEENSLAW_TEASERS_EXCLUDE_FIELD)) {
+                if ($exclude_field_value = $node->get(QUEENSLAW_TEASERS_EXCLUDE_FIELD)->value) {
+                  if ($exclude_field_value == 1) $include = FALSE;
+                }
+              }
+              if ($include) {
+                $attributes = [
+                  'class' => ['teaser'],
+                  'style' => [],
+                ];
+                $node_title = $node->getTitle();
+                $node_title = strip_tags($node_title);
+                $node_title = trim($node_title);
+                if ($node_title != '') {
+                  $id = 'teaser-' . Html::getID($node_title);
+                  $attributes['id'] = $id;
+                  $attributes['class'][] = $id;
+                }
+                if ($alternate) {
+                  if ($node->hasField(QUEENSLAW_TEASERS_IMAGE_FIELD)) {
+                    if ($image = $node->get(QUEENSLAW_TEASERS_IMAGE_FIELD)->entity) {
+                      if ($image_uri = $image->getFileUri()) {
+                        $title_image_url = ImageStyle::load(QUEENSLAW_TEASERS_ALTERNATE_IMAGE_STYLE)->buildUrl($image_uri);
+                        $title_image_url_relative = file_url_transform_relative($title_image_url);
+                        $attributes['style'] = "background-image: url($title_image_url_relative)";
+                        $attributes['class'][] = 'has-teaser-image';
+                      }
+                    }
+                  }
+                }
+                $build = $view_builder->view($node, $view_mode);
+                $item = render($build);
+                if ($child_nids = pi_functions_node_menu_child_nids($nid)) {
+                  $children = [];
+                  foreach ($child_nids as $child_nid) {
+                    if (($child_node = Node::load($child_nid)) && ($child_node->isPublished())) {
+                      if ($menu_links = pi_functions_menu_items_from_nid($child_nid)) {
+                        $menu_link = array_shift($menu_links);
+                        // in order to sort by weight then title, add 100 to the weight to ensure
+                        // that it's positive, then 0-pad it to three digits, then append the title,
+                        // then append the id just to guarantee no duplicates
+                        $weight = $menu_link['weight'] + 100;
+                        $id = str_pad($weight, 3, '0', STR_PAD_LEFT) . $menu_link['title'] . $menu_link['id'];
+                        $children[$id] = Link::fromTextAndUrl($menu_link['title'], Url::fromUri("internal:/node/{$child_nid}", []))->toString();
+                      }
+                    }
+                  }
+                  ksort($children);
+                  $list = [
+                    '#theme' => 'item_list',
+                    '#items' => $children,
+                  ];
+                  $item .= render($list);
+                  $attributes['class'][] = 'has-children';
+                }
+                $attributes_string = _queenslaw_teasers_attributes_string($attributes);
+                $teasers[] = "<div{$attributes_string}><div class=\"content\">{$item}</div></div>";
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  $output = '';
+  if (!empty($teasers)) {
+    $container_attributes_string = _queenslaw_teasers_attributes_string($container_attributes);
+    $output = "<div{$container_attributes_string}>" . implode('', $teasers) . '</div>';
+  }
+  return $output;
+}
+
+/**
+ * Test the path to determine if this is a page where the alternate style should be used.
+ * It appears that, in order to catch both the front page and other pages by alias, both
+ * the path and the alias have to be tested.
+ */
+function _queenslaw_teasers_match_alternate_teasers_path() {
+  $return = FALSE;
+  if ($patterns = \Drupal::config('queenslaw_teasers.settings')->get('paths')) {
+    $path = \Drupal::service('path.current')->getPath();
+    $alias = \Drupal::service('path.alias_manager')->getAliasByPath($path);
+    if (\Drupal::service('path.matcher')->matchPath($path, $patterns)) $return = TRUE;
+    elseif (\Drupal::service('path.matcher')->matchPath($alias, $patterns)) $return = TRUE;
+  }
+  return $return;
+}
+
+/**
+ * Convert an attributes array into a string.
+ */
+function _queenslaw_teasers_attributes_string($attributes) {
+  $attributes_string = '';
+  $attributes_strings = [];
+  foreach ($attributes as $name => $value) {
+    if (is_array($value)) $value = implode(' ', $value);
+    if ($value) $attributes_strings[] = "{$name}=\"{$value}\"";
+  }
+  if (!empty($attributes_strings)) $attributes_string = ' ' . implode(' ', $attributes_strings);
+  return $attributes_string;
+}

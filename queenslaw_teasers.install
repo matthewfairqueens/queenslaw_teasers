@@ -1,0 +1,4 @@
+<?php
+function queenslaw_teasers_uninstall() {
+  \Drupal::configFactory()->getEditable('queenslaw_teasers.settings')->delete();
+}

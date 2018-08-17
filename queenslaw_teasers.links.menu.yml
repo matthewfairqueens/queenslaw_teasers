@@ -1,0 +1,5 @@
+queenslaw_teasers.admin:
+  title: "Queen's Law teasers"
+  description: "Manage Queen's Law teasers settings"
+  parent: system.admin_structure
+  route_name: queenslaw_teasers.admin

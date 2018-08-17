@@ -1,0 +1,7 @@
+queenslaw_teasers.admin:
+  path: '/admin/structure/queenslaw-teasers'
+  defaults:
+    _form: 'Drupal\queenslaw_teasers\Form\QueensLawTeasersAdminForm'
+    _title: "Queen's Law Teasers Settings"
+  requirements:
+    _permission: 'manage queenslaw_teasers'
