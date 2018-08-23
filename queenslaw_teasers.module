@@ -92,7 +92,7 @@ function _queenslaw_teasers_block_content($menus = []) {
                       if ($image_uri = $image->getFileUri()) {
                         $title_image_url = ImageStyle::load(QUEENSLAW_TEASERS_ALTERNATE_IMAGE_STYLE)->buildUrl($image_uri);
                         $title_image_url_relative = file_url_transform_relative($title_image_url);
-                        $attributes['style'] = "background-image: url($title_image_url_relative)";
+                        $attributes['style'] = "background-image: url({$title_image_url_relative})";
                         $attributes['class'][] = 'has-teaser-image';
                       }
                     }
